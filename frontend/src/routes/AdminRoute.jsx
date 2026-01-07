@@ -2,7 +2,7 @@ import React, { useContext } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext'; // adjust path
 
-const adminEmail = "admin@example.com"; // replace with your admin email
+const adminEmail = "balogunmishael7@gmail.com"; // replace with your admin email
 
 const AdminRoute = ({ children }) => {
   const { user } = useContext(AuthContext); // assuming your AuthContext provides `user`
