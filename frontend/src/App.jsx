@@ -18,6 +18,7 @@ import Orders from './pages/dashboard/Orders';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminProducts from './pages/admin/AdminProducts';
 import AdminOrders from './pages/admin/AdminOrders';
+import AdminRoute from './routes/AdminRoute'; // <-- import the new route protector
 
 function App() {
   return (
@@ -35,15 +36,33 @@ function App() {
                 <Route path="/checkout" element={<Checkout />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
-                
+
+                {/* User Dashboard */}
                 <Route path="/dashboard" element={<Dashboard />}>
-                  <Route index element={<div className="bg-white rounded-lg shadow-md p-6"><h2 className="text-2xl font-bold">Welcome to your dashboard!</h2></div>} />
+                  <Route index element={
+                    <div className="bg-white rounded-lg shadow-md p-6">
+                      <h2 className="text-2xl font-bold">Welcome to your dashboard!</h2>
+                    </div>
+                  } />
                   <Route path="orders" element={<Orders />} />
                 </Route>
 
-                <Route path="/admin" element={<AdminDashboard />} />
-                <Route path="/admin/products" element={<AdminProducts />} />
-                <Route path="/admin/orders" element={<AdminOrders />} />
+                {/* Admin Routes */}
+                <Route path="/admin" element={
+                  <AdminRoute>
+                    <AdminDashboard />
+                  </AdminRoute>
+                } />
+                <Route path="/admin/products" element={
+                  <AdminRoute>
+                    <AdminProducts />
+                  </AdminRoute>
+                } />
+                <Route path="/admin/orders" element={
+                  <AdminRoute>
+                    <AdminOrders />
+                  </AdminRoute>
+                } />
               </Routes>
             </main>
             <Footer />
