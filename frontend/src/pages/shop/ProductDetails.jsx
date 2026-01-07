@@ -33,9 +33,13 @@ const ProductDetails = () => {
     }
   };
 
+  if (!product || !product.sizeStock) {
+  return <div className="text-center py-12">Product unavailable</div>;
+}
+
   const handleAddToCart = () => {
-    if (!selectedSize) {
-      alert('Please select a size');
+    if (!selectedSize || quantity < 1) {
+      alert('Please select a size and quantity');
       return;
     }
     addToCart(product, selectedSize, quantity);

@@ -30,6 +30,7 @@ const Shop = () => {
       const response = await API.get(`/products?${params.toString()}`);
       setProducts(response.data.products);
     } catch (error) {
+      setProducts([]);
       console.error('Error fetching products:', error);
     } finally {
       setLoading(false);
