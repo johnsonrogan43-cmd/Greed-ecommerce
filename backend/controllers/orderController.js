@@ -1,13 +1,13 @@
+const Order = require('../models/Order');
+const Product = require('../models/Product');
+const mongoose = require('mongoose');
 const { Resend } = require('resend');
 
-// Initialize Resend
+// Initialize Resend (only if API key exists)
 let resend = null;
 if (process.env.RESEND_API_KEY) {
   resend = new Resend(process.env.RESEND_API_KEY);
 }
-
-// In-memory storage (replace with database later)
-const orders = [];
 
 // Verify Paystack Payment
 const verifyPaystackPayment = async (reference) => {
@@ -37,15 +37,20 @@ const sendOrderConfirmationEmail = async (orderData) => {
 
   try {
     const itemsList = orderData.items
-      .map(
-        (item) =>
-          `<tr>
-            <td style="padding: 10px; border-bottom: 1px solid #eee;">${item.name} (Size: ${item.size})</td>
-            <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
-            <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">₦${(item.price * item.quantity).toLocaleString()}</td>
-          </tr>`
-      )
+      .map((item) => {
+        const itemName = item.product?.name || item.name || 'Product';
+        const itemPrice = item.price || 0;
+        const itemQuantity = item.quantity || 0;
+        return `<tr>
+          <td style="padding: 10px; border-bottom: 1px solid #eee;">${itemName} (Size: ${item.size})</td>
+          <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">${itemQuantity}</td>
+          <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">₦${(itemPrice * itemQuantity).toLocaleString()}</td>
+        </tr>`;
+      })
       .join('');
+
+    const customerName = orderData.customerInfo?.name || orderData.shippingAddress?.name || 'Customer';
+    const customerEmail = orderData.customerInfo?.email || orderData.user?.email || 'customer@example.com';
 
     const emailHtml = `
       <!DOCTYPE html>
@@ -69,14 +74,14 @@ const sendOrderConfirmationEmail = async (orderData) => {
             </div>
             
             <div class="content">
-              <p>Hi <strong>${orderData.customerInfo.name}</strong>,</p>
+              <p>Hi <strong>${customerName}</strong>,</p>
               <p>Thank you for your order! We've received your order and it's being processed.</p>
               
               <div class="order-details">
                 <h2>Order Details</h2>
-                <p><strong>Order ID:</strong> ${orderData.orderId}</p>
+                <p><strong>Order ID:</strong> ${orderData._id}</p>
                 <p><strong>Payment Method:</strong> ${orderData.paymentMethod === 'paystack' ? '💳 Paystack' : '🚚 Pay on Delivery'}</p>
-                <p><strong>Payment Status:</strong> ${orderData.paymentStatus === 'paid' ? '✅ Paid' : '⏳ Pending'}</p>
+                <p><strong>Payment Status:</strong> ${orderData.paymentStatus === 'completed' ? '✅ Paid' : '⏳ Pending'}</p>
                 
                 <h3>Items Ordered:</h3>
                 <table>
@@ -103,11 +108,7 @@ const sendOrderConfirmationEmail = async (orderData) => {
                   ${orderData.shippingAddress.country}, ${orderData.shippingAddress.zipCode}
                 </p>
                 
-                <h3>Contact Information:</h3>
-                <p>
-                  <strong>Email:</strong> ${orderData.customerInfo.email}<br>
-                  <strong>Phone:</strong> ${orderData.customerInfo.phone}
-                </p>
+                ${orderData.customerInfo?.phone ? `<p><strong>Contact:</strong> ${orderData.customerInfo.phone}</p>` : ''}
               </div>
               
               <p>We'll send you another email when your order ships.</p>
@@ -124,197 +125,251 @@ const sendOrderConfirmationEmail = async (orderData) => {
     `;
 
     await resend.emails.send({
-      from: 'onboarding@resend.dev',
-      to: orderData.customerInfo.email,
-      subject: `Order Confirmation - Order #${orderData.orderId}`,
+      from: 'onboarding@resend.dev', // Change this after verifying your domain
+      to: customerEmail,
+      subject: `Order Confirmation - Order #${orderData._id}`,
       html: emailHtml,
     });
 
-    console.log('Email sent successfully to:', orderData.customerInfo.email);
+    console.log('✅ Email sent successfully to:', customerEmail);
     return true;
   } catch (error) {
-    console.error('Email sending error:', error);
+    console.error('❌ Email sending error:', error);
     return false;
   }
 };
 
-// Create Order (Public - works for both guests and logged-in users)
+// Create order (Updated to support both guest and authenticated users)
 exports.createOrder = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
   try {
-    const orderData = req.body;
-
+    const { items, shippingAddress, paymentMethod, paymentReference, customerInfo } = req.body;
+    
     // Validate required fields
-    if (!orderData.items || orderData.items.length === 0) {
+    if (!items || items.length === 0) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: 'No items in order',
+        message: 'No items in order'
       });
     }
 
-    if (!orderData.customerInfo || !orderData.shippingAddress) {
+    if (!shippingAddress) {
+      await session.abortTransaction();
       return res.status(400).json({
         success: false,
-        message: 'Missing customer or shipping information',
+        message: 'Shipping address is required'
+      });
+    }
+
+    // For guest checkout, require customerInfo
+    if (!req.user && !customerInfo) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: 'Customer information is required for guest checkout'
       });
     }
 
     // Verify Paystack payment if applicable
-    if (orderData.paymentMethod === 'paystack' && orderData.paymentReference) {
+    if (paymentMethod === 'paystack' && paymentReference) {
       if (!process.env.PAYSTACK_SECRET_KEY) {
-        console.warn('Paystack secret key not configured');
+        console.warn('⚠️ Paystack secret key not configured');
       } else {
-        const isPaymentValid = await verifyPaystackPayment(orderData.paymentReference);
+        const isPaymentValid = await verifyPaystackPayment(paymentReference);
         
         if (!isPaymentValid) {
+          await session.abortTransaction();
           return res.status(400).json({
             success: false,
-            message: 'Payment verification failed',
+            message: 'Payment verification failed'
           });
         }
       }
     }
 
-    // Generate Order ID
-    const orderId = `ORD-${Date.now()}`;
+    // Validate and calculate total
+    let totalAmount = 0;
+    const orderItems = [];
     
-    // Prepare complete order data
-    const completeOrderData = {
-      ...orderData,
-      orderId,
-      userId: req.user?._id || null, // Link to user if logged in
-      orderDate: new Date().toISOString(),
-      status: 'processing',
+    for (const item of items) {
+      const product = await Product.findById(item.productId).session(session);
+      
+      if (!product) {
+        throw new Error(`Product ${item.productId} not found`);
+      }
+      
+      // Check stock
+      if (product.sizeStock[item.size] < item.quantity) {
+        throw new Error(`Insufficient stock for ${product.name} in size ${item.size}`);
+      }
+      
+      // Deduct stock
+      product.sizeStock[item.size] -= item.quantity;
+      await product.save({ session });
+      
+      orderItems.push({
+        product: product._id,
+        size: item.size,
+        quantity: item.quantity,
+        price: product.price,
+        name: product.name // Store name for email
+      });
+      
+      totalAmount += product.price * item.quantity;
+    }
+    
+    // Determine payment status
+    const paymentStatus = paymentMethod === 'paystack' ? 'completed' : 'pending';
+    
+    // Create order
+    const order = await Order.create([{
+      user: req.user?._id || null, // null for guest orders
+      items: orderItems,
+      shippingAddress,
+      totalAmount,
+      paymentMethod: paymentMethod || 'paystack',
+      paymentReference: paymentReference || undefined,
+      paymentStatus,
+      orderStatus: 'pending',
+      customerInfo // Store for guest orders
+    }], { session });
+    
+    await session.commitTransaction();
+
+    // Prepare order data for email
+    const orderForEmail = {
+      ...order[0].toObject(),
+      customerInfo: customerInfo || {
+        name: req.user?.name,
+        email: req.user?.email
+      }
     };
 
-    // Save order (replace with database save)
-    orders.push(completeOrderData);
-
-    // Send confirmation email
-    await sendOrderConfirmationEmail(completeOrderData);
-
-    // Send success response
-    return res.status(200).json({
+    // Send confirmation email (non-blocking)
+    sendOrderConfirmationEmail(orderForEmail).catch(err => 
+      console.error('Email sending failed:', err)
+    );
+    
+    res.status(201).json({
       success: true,
-      message: 'Order placed successfully!',
-      orderId,
-      order: completeOrderData,
+      message: 'Order created successfully! Check your email for confirmation.',
+      order: order[0]
     });
   } catch (error) {
+    await session.abortTransaction();
     console.error('Order creation error:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
-      message: 'Error processing order',
-      error: error.message,
+      message: 'Error creating order',
+      error: error.message
     });
+  } finally {
+    session.endSession();
   }
 };
 
-// Get User Orders (Protected - only for logged-in users)
+// Get user orders
 exports.getUserOrders = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const orders = await Order.find({ user: req.user._id })
+      .populate('items.product')
+      .sort({ createdAt: -1 });
     
-    // Filter orders by user ID
-    const userOrders = orders.filter(order => order.userId === userId);
-
-    return res.status(200).json({
+    res.json({
       success: true,
-      orders: userOrders,
-      total: userOrders.length,
+      count: orders.length,
+      orders
     });
   } catch (error) {
-    console.error('Get user orders error:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: 'Error fetching orders',
-      error: error.message,
+      error: error.message
     });
   }
 };
 
-// Get All Orders (Admin only)
+// Get all orders (Admin only)
 exports.getAllOrders = async (req, res) => {
   try {
-    return res.status(200).json({
+    const orders = await Order.find()
+      .populate('user', 'name email')
+      .populate('items.product')
+      .sort({ createdAt: -1 });
+    
+    res.json({
       success: true,
-      orders,
-      total: orders.length,
+      count: orders.length,
+      orders
     });
   } catch (error) {
-    console.error('Get orders error:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: 'Error fetching orders',
-      error: error.message,
+      error: error.message
     });
   }
 };
 
-// Get Order By ID (Public - anyone can check order status with order ID)
+// Get order by ID (for tracking - no auth required)
 exports.getOrderById = async (req, res) => {
   try {
-    const { id } = req.params;
-    const order = orders.find(o => o.orderId === id);
-
+    const order = await Order.findById(req.params.id)
+      .populate('items.product')
+      .populate('user', 'name email');
+    
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found',
+        message: 'Order not found'
       });
     }
-
-    return res.status(200).json({
+    
+    res.json({
       success: true,
-      order,
+      order
     });
   } catch (error) {
-    console.error('Get order error:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: 'Error fetching order',
-      error: error.message,
+      error: error.message
     });
   }
 };
 
-// Update Order Status (Admin only)
+// Update order status (Admin only)
 exports.updateOrderStatus = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    const orderIndex = orders.findIndex(o => o.orderId === id);
-
-    if (orderIndex === -1) {
+    const { orderStatus, paymentStatus } = req.body;
+    
+    const order = await Order.findById(req.params.id);
+    
+    if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found',
+        message: 'Order not found'
       });
     }
-
-    // Validate status
-    const validStatuses = ['processing', 'shipped', 'delivered', 'cancelled'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid status',
-      });
-    }
-
-    orders[orderIndex].status = status;
-    orders[orderIndex].updatedAt = new Date().toISOString();
-
-    return res.status(200).json({
+    
+    if (orderStatus) order.orderStatus = orderStatus;
+    if (paymentStatus) order.paymentStatus = paymentStatus;
+    
+    await order.save();
+    
+    res.json({
       success: true,
-      message: 'Order status updated',
-      order: orders[orderIndex],
+      message: 'Order updated successfully',
+      order
     });
   } catch (error) {
-    console.error('Update order error:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: 'Error updating order',
-      error: error.message,
+      error: error.message
     });
   }
 };

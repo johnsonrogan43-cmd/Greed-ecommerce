@@ -11,19 +11,20 @@ const {
 
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 
-// Create order (Public - no login required for guest checkout)
+// Create order - PUBLIC (no auth required for guest checkout)
+// But can also work for authenticated users
 router.post('/', createOrder);
 
-// Get single order by ID (Public - users can check order status with order ID)
+// Get single order by ID - PUBLIC (for order tracking)
 router.get('/:id', getOrderById);
 
-// Get logged-in user's orders
-router.get('/user', protect, getUserOrders);
+// Get logged-in user's orders - PROTECTED
+router.get('/user/orders', protect, getUserOrders);
 
-// Get all orders (Admin)
+// Get all orders - ADMIN ONLY
 router.get('/all', protect, adminOnly, getAllOrders);
 
-// Update order status (Admin)
+// Update order status - ADMIN ONLY
 router.put('/:id/status', protect, adminOnly, updateOrderStatus);
 
 module.exports = router;
