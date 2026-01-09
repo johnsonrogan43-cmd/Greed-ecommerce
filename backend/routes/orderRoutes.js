@@ -6,12 +6,16 @@ const {
   getUserOrders,
   getAllOrders,
   updateOrderStatus,
+  getOrderById,
 } = require('../controllers/orderController');
 
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 
-// Create order (User)
-router.post('/', protect, createOrder);
+// Create order (Public - no login required for guest checkout)
+router.post('/', createOrder);
+
+// Get single order by ID (Public - users can check order status with order ID)
+router.get('/:id', getOrderById);
 
 // Get logged-in user's orders
 router.get('/user', protect, getUserOrders);
