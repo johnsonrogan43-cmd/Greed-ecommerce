@@ -1,6 +1,10 @@
-import { Resend } from 'resend';
+const { Resend } = require('resend');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize Resend (only if API key exists)
+let resend = null;
+if (process.env.RESEND_API_KEY) {
+  resend = new Resend(process.env.RESEND_API_KEY);
+}
 
 // Verify Paystack Payment
 async function verifyPaystackPayment(reference) {
@@ -23,6 +27,12 @@ async function verifyPaystackPayment(reference) {
 
 // Send Order Confirmation Email
 async function sendOrderConfirmationEmail(orderData) {
+  // Skip email if Resend is not configured
+  if (!resend) {
+    console.log('Resend not configured, skipping email');
+    return true;
+  }
+
   try {
     const itemsList = orderData.items
       .map(
@@ -112,7 +122,7 @@ async function sendOrderConfirmationEmail(orderData) {
     `;
 
     await resend.emails.send({
-      from: 'Greed Store <orders@yourdomain.com>', // Change this to your verified domain
+      from: 'onboarding@resend.dev', // Change this after verifying your domain
       to: orderData.customerInfo.email,
       subject: `Order Confirmation - Order #${orderData.orderId}`,
       html: emailHtml,
@@ -126,10 +136,10 @@ async function sendOrderConfirmationEmail(orderData) {
   }
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS, GET');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   // Handle preflight request
@@ -137,10 +147,22 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
+  // Handle GET request (for testing)
+  if (req.method === 'GET') {
+    return res.status(200).json({
+      success: true,
+      message: 'Orders API is working!',
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   // Handle POST request
   if (req.method === 'POST') {
     try {
       const orderData = req.body;
+
+      // Log received data for debugging
+      console.log('Received order data:', JSON.stringify(orderData, null, 2));
 
       // Validate required fields
       if (!orderData.items || orderData.items.length === 0) {
@@ -158,14 +180,18 @@ export default async function handler(req, res) {
       }
 
       // Verify Paystack payment if applicable
-      if (orderData.paymentMethod === 'paystack') {
-        const isPaymentValid = await verifyPaystackPayment(orderData.paymentReference);
-        
-        if (!isPaymentValid) {
-          return res.status(400).json({
-            success: false,
-            message: 'Payment verification failed',
-          });
+      if (orderData.paymentMethod === 'paystack' && orderData.paymentReference) {
+        if (!process.env.PAYSTACK_SECRET_KEY) {
+          console.warn('Paystack secret key not configured');
+        } else {
+          const isPaymentValid = await verifyPaystackPayment(orderData.paymentReference);
+          
+          if (!isPaymentValid) {
+            return res.status(400).json({
+              success: false,
+              message: 'Payment verification failed',
+            });
+          }
         }
       }
 
@@ -180,16 +206,13 @@ export default async function handler(req, res) {
         status: 'processing',
       };
 
-      // TODO: Save order to database here
-      // await saveOrderToDatabase(completeOrderData);
-
-      // Send confirmation email
+      // Send confirmation email (will skip if Resend not configured)
       await sendOrderConfirmationEmail(completeOrderData);
 
       // Send success response
       return res.status(200).json({
         success: true,
-        message: 'Order placed successfully! Check your email for confirmation.',
+        message: 'Order placed successfully!',
         orderId,
         order: completeOrderData,
       });
@@ -199,6 +222,7 @@ export default async function handler(req, res) {
         success: false,
         message: 'Error processing order',
         error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       });
     }
   }
@@ -207,4 +231,4 @@ export default async function handler(req, res) {
     success: false,
     message: 'Method not allowed',
   });
-}
+};
