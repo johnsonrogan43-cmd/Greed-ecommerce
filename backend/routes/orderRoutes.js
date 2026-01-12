@@ -6,20 +6,25 @@ const {
   getUserOrders,
   getAllOrders,
   updateOrderStatus,
+  getOrderById,
 } = require('../controllers/orderController');
 
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 
-// Create order (User)
-router.post('/', protect, createOrder);
+// Create order - PUBLIC (no auth required for guest checkout)
+// But can also work for authenticated users
+router.post('/', createOrder);
 
-// Get logged-in user's orders
-router.get('/user', protect, getUserOrders);
+// Get single order by ID - PUBLIC (for order tracking)
+router.get('/:id', getOrderById);
 
-// Get all orders (Admin)
+// Get logged-in user's orders - PROTECTED
+router.get('/user/orders', protect, getUserOrders);
+
+// Get all orders - ADMIN ONLY
 router.get('/all', protect, adminOnly, getAllOrders);
 
-// Update order status (Admin)
+// Update order status - ADMIN ONLY
 router.put('/:id/status', protect, adminOnly, updateOrderStatus);
 
 module.exports = router;

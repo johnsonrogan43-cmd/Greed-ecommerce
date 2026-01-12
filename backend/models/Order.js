@@ -4,7 +4,13 @@ const orderSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: false // Allow guest checkout
+  },
+  // For guest checkout - store customer info
+  customerInfo: {
+    name: String,
+    email: String,
+    phone: String
   },
   items: [{
     product: {
@@ -45,7 +51,8 @@ const orderSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['stripe', 'paystack']
+    enum: ['stripe', 'paystack', 'pay_on_delivery'],
+    default: 'paystack'
   },
   paymentReference: String,
   orderStatus: {
