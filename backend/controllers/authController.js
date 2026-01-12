@@ -16,6 +16,7 @@ const generateToken = (user) => {
 // Register User
 export const register = async (req, res) => {
   try {
+    console.log('Register request:', req.body);
     const { name, email, password } = req.body;
 
     // Check if user exists
@@ -46,6 +47,7 @@ export const register = async (req, res) => {
     });
   } catch (error) {
     console.error('Registration error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({ 
       success: false, 
       message: 'Registration failed',
@@ -57,28 +59,50 @@ export const register = async (req, res) => {
 // Login User
 export const login = async (req, res) => {
   try {
+    console.log('Login request received:', req.body);
+    
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      console.log('Missing email or password');
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Email and password are required' 
+      });
+    }
+
+    console.log('Looking for user with email:', email);
+    
     // Find user
     const user = await User.findOne({ email });
+    
     if (!user) {
+      console.log('User not found');
       return res.status(401).json({ 
         success: false, 
         message: 'Invalid email or password' 
       });
     }
+
+    console.log('User found, checking password');
 
     // Check password
     const isPasswordValid = await user.comparePassword(password);
+    
     if (!isPasswordValid) {
+      console.log('Invalid password');
       return res.status(401).json({ 
         success: false, 
         message: 'Invalid email or password' 
       });
     }
 
+    console.log('Password valid, generating token');
+
     // Generate token
     const token = generateToken(user);
+
+    console.log('Login successful');
 
     res.json({
       success: true,
@@ -93,6 +117,12 @@ export const login = async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message
+    });
+    
     res.status(500).json({ 
       success: false, 
       message: 'Login failed',
