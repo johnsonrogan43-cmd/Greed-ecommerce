@@ -1,5 +1,5 @@
-const User = require('../models/User');
-const jwt = require('jsonwebtoken');
+import User from '../models/User.js';
+import jwt from 'jsonwebtoken';
 
 // Generate JWT Token
 const generateToken = (user) => {
@@ -14,7 +14,7 @@ const generateToken = (user) => {
 };
 
 // Register User
-exports.register = async (req, res) => {
+export const register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
@@ -33,7 +33,6 @@ exports.register = async (req, res) => {
     // Generate token
     const token = generateToken(user);
 
-
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
@@ -46,6 +45,7 @@ exports.register = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Registration error:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Registration failed',
@@ -55,7 +55,7 @@ exports.register = async (req, res) => {
 };
 
 // Login User
-exports.login = async (req, res) => {
+export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -80,7 +80,6 @@ exports.login = async (req, res) => {
     // Generate token
     const token = generateToken(user);
 
-
     res.json({
       success: true,
       message: 'Login successful',
@@ -93,6 +92,7 @@ exports.login = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Login failed',
