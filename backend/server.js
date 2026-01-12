@@ -7,6 +7,18 @@ dotenv.config();
 
 const app = express();
 
+// CORS configuration
+app.use(cors({
+  origin: [
+    'http://localhost:5173', // Local development
+    'http://localhost:3000', // Alternative local port
+    'https://greed-ecommerce.vercel.app' // Your production frontend
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 // SIMPLIFIED CORS - Allow All Origins for Now
 app.use(cors({
   origin: '*',
