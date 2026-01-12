@@ -1,90 +1,47 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const dotenv = require('dotenv');
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
 
 dotenv.config();
 
 const app = express();
 
-// CORS configuration
+// CORS middleware
 app.use(cors({
-  origin: [
-    'http://localhost:5173', // Local development
-    'http://localhost:3000', // Alternative local port
-    'https://greed-ecommerce.vercel.app' // Your production frontend
-  ],
+  origin: ['https://greed-ecommerce.vercel.app', 'http://localhost:5173'],
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-// SIMPLIFIED CORS - Allow All Origins for Now
-app.use(cors({
-  origin: '*',
-  credentials: false,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
+// Additional CORS headers for preflight
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://greed-ecommerce.vercel.app');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  
+  next();
+});
 
-
-// Middleware
+// Body parser
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Database Connection
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ MongoDB Connected'))
-  .catch((err) => console.error('❌ MongoDB Error:', err));
-
-// Import Routes
-const authRoutes = require('./routes/authRoutes');
-const productRoutes = require('./routes/productRoutes');
-const cartRoutes = require('./routes/cartRoutes');
-const orderRoutes = require('./routes/orderRoutes');
-
-// Use Routes
+// Your routes
 app.use('/api/auth', authRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/cart', cartRoutes);
-app.use('/api/orders', orderRoutes);
+// ... other routes
 
-// Health Check
-app.get('/', (req, res) => {
-  res.json({ 
-    message: '🔥 GREED API is running!',
-    status: 'active',
-    environment: process.env.NODE_ENV || 'development'
-  });
+// Test route
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'CORS is working!' });
 });
 
-// 404 Handler
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route not found'
-  });
-});
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
-// Error Handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Something went wrong!',
-    error: process.env.NODE_ENV === 'development' ? err.stack : undefined
-  });
-});
-
-// Start Server
-if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
-  const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => {
-    console.log(`✅ Server running on port ${PORT}`);
-  });
-}
-
-// Export for Vercel
-module.exports = app;
+export default app;
