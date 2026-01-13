@@ -5,16 +5,15 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-
-// Add this for Vercel deployment
-const allowedOrigins = [
-  'http://localhost:3000',
-  'https://greed-ecommerce.vercel.app' // We'll update this later
-];
-
 const app = express();
 
-// Replace your current app.use(cors()); with this:
+// Allowed origins for CORS
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://greed-ecommerce.vercel.app'
+];
+
+// CORS Configuration
 app.use(cors({
   origin: function(origin, callback) {
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
@@ -26,16 +25,27 @@ app.use(cors({
   credentials: true
 }));
 
+// Body Parser Middleware (IMPORTANT - was missing!)
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 // Database Connection
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB Connected'))
   .catch((err) => console.error('❌ MongoDB Error:', err));
 
-// Import Routes
-const authRoutes = require('./routes/authRoutes');
-const productRoutes = require('./routes/productRoutes');
-const cartRoutes = require('./routes/cartRoutes');
-const orderRoutes = require('./routes/orderRoutes');
+// Import Routes with error handling
+let authRoutes, productRoutes, cartRoutes, orderRoutes;
+
+try {
+  authRoutes = require('./routes/authRoutes');
+  productRoutes = require('./routes/productRoutes');
+  cartRoutes = require('./routes/cartRoutes');
+  orderRoutes = require('./routes/orderRoutes');
+} catch (error) {
+  console.error('❌ Error loading routes:', error.message);
+  process.exit(1);
+}
 
 // Use Routes
 app.use('/api/auth', authRoutes);
@@ -58,27 +68,13 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start Server
+// Start Server (Note: Vercel handles this automatically in production)
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-});
-
-// Import Routes with error handling
-let authRoutes, productRoutes, cartRoutes, orderRoutes;
-
-try {
-  authRoutes = require('./routes/authRoutes');
-  productRoutes = require('./routes/productRoutes');
-  cartRoutes = require('./routes/cartRoutes');
-  orderRoutes = require('./routes/orderRoutes');
-} catch (error) {
-  console.error('❌ Error loading routes:', error.message);
-  process.exit(1);
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`✅ Server running on port ${PORT}`);
+  });
 }
 
-// Use Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/cart', cartRoutes);
-app.use('/api/orders', orderRoutes);
+// Export for Vercel
+module.exports = app;
