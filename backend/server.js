@@ -63,3 +63,22 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
+// Import Routes with error handling
+let authRoutes, productRoutes, cartRoutes, orderRoutes;
+
+try {
+  authRoutes = require('./routes/authRoutes');
+  productRoutes = require('./routes/productRoutes');
+  cartRoutes = require('./routes/cartRoutes');
+  orderRoutes = require('./routes/orderRoutes');
+} catch (error) {
+  console.error('❌ Error loading routes:', error.message);
+  process.exit(1);
+}
+
+// Use Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/cart', cartRoutes);
+app.use('/api/orders', orderRoutes);
