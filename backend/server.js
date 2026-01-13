@@ -9,7 +9,7 @@ dotenv.config();
 // Add this for Vercel deployment
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://your-frontend-url.vercel.app' // We'll update this later
+  'https://greed-ecommerce.vercel.app' // We'll update this later
 ];
 
 const app = express();
