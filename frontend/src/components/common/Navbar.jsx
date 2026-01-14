@@ -10,6 +10,10 @@ const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
+  // derive display name and role check
+  const displayName = user ? (user.firstName ? `${user.firstName} ${user.lastName || ''}` : user.email || 'User') : '';
+  const isAdmin = user ? ['admin', 'superadmin'].includes(user.role) : false;
+
   return (
     <nav className="fixed w-full top-0 z-50 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b border-amber-900/20 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -59,12 +63,12 @@ const Navbar = () => {
                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-amber-900/30 to-amber-800/30 border border-amber-700/30 text-amber-300 hover:border-amber-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/20"
                 >
                   <User className="w-4 h-4" />
-                  <span className="font-medium">{user.name}</span>
+                  <span className="font-medium">{displayName}</span>
                 </button>
 
                 {userMenuOpen && (
                   <div className="absolute right-0 mt-2 w-56 bg-slate-900 border border-amber-700/30 rounded-lg shadow-2xl shadow-amber-500/10 overflow-hidden">
-                    {user.role === 'admin' && (
+                    {isAdmin && (
                       <Link
                         to="/admin"
                         className="flex items-center gap-3 px-4 py-3 text-gray-300 hover:bg-amber-900/20 hover:text-amber-400 transition-all duration-200"
