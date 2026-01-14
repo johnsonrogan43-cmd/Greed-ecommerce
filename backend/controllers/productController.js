@@ -1,124 +1,194 @@
+// FILE: controllers/productController.js
+// ============================================
 const Product = require('../models/Product');
 
-// Get all products with filters
-exports.getAllProducts = async (req, res) => {
+exports.getProducts = async (req, res) => {
   try {
-    const { category, brand, team, minPrice, maxPrice, search } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    // Build filter
+    const filter = { isActive: true };
     
-    let query = {};
-    
-    if (category) query.category = category;
-    if (brand) query.brand = brand;
-    if (team) query.team = team;
-    if (search) query.name = { $regex: search, $options: 'i' };
-    if (minPrice || maxPrice) {
-      query.price = {};
-      if (minPrice) query.price.$gte = Number(minPrice);
-      if (maxPrice) query.price.$lte = Number(maxPrice);
+    if (req.query.category) {
+      filter.category = req.query.category;
     }
     
-    const products = await Product.find(query);
-    
+    if (req.query.search) {
+      filter.$or = [
+        { name: { $regex: req.query.search, $options: 'i' } },
+        { description: { $regex: req.query.search, $options: 'i' } },
+        { tags: { $in: [new RegExp(req.query.search, 'i')] } }
+      ];
+    }
+
+    if (req.query.minPrice || req.query.maxPrice) {
+      filter.price = {};
+      if (req.query.minPrice) filter.price.$gte = parseFloat(req.query.minPrice);
+      if (req.query.maxPrice) filter.price.$lte = parseFloat(req.query.maxPrice);
+    }
+
+    if (req.query.inStock === 'true') {
+      filter.stock = { $gt: 0 };
+    }
+
+    // Build sort
+    let sort = {};
+    if (req.query.sort) {
+      const sortFields = {
+        'price_asc': { price: 1 },
+        'price_desc': { price: -1 },
+        'name_asc': { name: 1 },
+        'name_desc': { name: -1 },
+        'newest': { createdAt: -1 },
+        'popular': { soldCount: -1 },
+        'rating': { 'rating.average': -1 }
+      };
+      sort = sortFields[req.query.sort] || { createdAt: -1 };
+    } else {
+      sort = { createdAt: -1 };
+    }
+
+    const products = await Product.find(filter)
+      .populate('category', 'name slug')
+      .populate('subcategory', 'name slug')
+      .sort(sort)
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Product.countDocuments(filter);
+
     res.json({
       success: true,
-      count: products.length,
-      products
+      data: {
+        products,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      }
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error fetching products',
-      error: error.message
+      message: error.message
     });
   }
 };
 
-// Get single product
-exports.getProductById = async (req, res) => {
+exports.getProduct = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
-    
+    const product = await Product.findById(req.params.id)
+      .populate('category', 'name slug')
+      .populate('subcategory', 'name slug')
+      .populate('seller', 'firstName lastName');
+
     if (!product) {
       return res.status(404).json({
         success: false,
         message: 'Product not found'
       });
     }
-    
+
+    // Increment view count
+    product.viewCount += 1;
+    await product.save();
+
     res.json({
       success: true,
-      product
+      data: { product }
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error fetching product',
-      error: error.message
+      message: error.message
     });
   }
 };
 
-// Create product (Admin only)
 exports.createProduct = async (req, res) => {
   try {
-    const product = await Product.create(req.body);
+    req.body.seller = req.user.id;
     
+    const product = await Product.create(req.body);
+
     res.status(201).json({
       success: true,
       message: 'Product created successfully',
-      product
+      data: { product }
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error creating product',
-      error: error.message
+      message: error.message
     });
   }
 };
 
-// Update product (Admin only)
 exports.updateProduct = async (req, res) => {
   try {
-    const product = await Product.findByIdAndUpdate(
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    // Check ownership for non-admin users
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin' && 
+        product.seller.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to update this product'
+      });
+    }
+
+    const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     );
-    
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: 'Product not found'
-      });
-    }
-    
+
     res.json({
       success: true,
       message: 'Product updated successfully',
-      product
+      data: { product: updatedProduct }
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error updating product',
-      error: error.message
+      message: error.message
     });
   }
 };
 
-// Delete product (Admin only)
 exports.deleteProduct = async (req, res) => {
   try {
-    const product = await Product.findByIdAndDelete(req.params.id);
-    
+    const product = await Product.findById(req.params.id);
+
     if (!product) {
       return res.status(404).json({
         success: false,
         message: 'Product not found'
       });
     }
-    
+
+    // Check ownership for non-admin users
+    if (req.user.role !== 'admin' && req.user.role !== 'superadmin' && 
+        product.seller.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to delete this product'
+      });
+    }
+
+    await product.deleteOne();
+
     res.json({
       success: true,
       message: 'Product deleted successfully'
@@ -126,8 +196,27 @@ exports.deleteProduct = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error deleting product',
-      error: error.message
+      message: error.message
     });
   }
 };
+
+exports.getFeaturedProducts = async (req, res) => {
+  try {
+    const products = await Product.find({ isFeatured: true, isActive: true })
+      .populate('category', 'name slug')
+      .limit(10)
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: { products }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+

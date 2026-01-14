@@ -1,132 +1,126 @@
-import User from '../models/User.js';
-import jwt from 'jsonwebtoken';
+// FILE: controllers/authController.js
+// ============================================
+const User = require('../models/User');
+const jwt = require('jsonwebtoken');
 
-// Generate JWT Token
-const generateToken = (user) => {
-  return jwt.sign(
-    { 
-      id: user._id, 
-      role: user.role 
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: '30d' }
-  );
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: '30d'
+  });
 };
 
-// Register User
-export const register = async (req, res) => {
+exports.register = async (req, res) => {
   try {
-    console.log('Register request:', req.body);
-    const { name, email, password } = req.body;
+    const { firstName, lastName, email, password, phone } = req.body;
 
-    // Check if user exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email already registered' 
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({
+        success: false,
+        message: 'User already exists with this email'
       });
     }
 
-    // Create user
-    const user = await User.create({ name, email, password });
+    const user = await User.create({
+      firstName,
+      lastName,
+      email,
+      password,
+      phone
+    });
 
-    // Generate token
-    const token = generateToken(user);
+    const token = generateToken(user._id);
 
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role
+      data: {
+        user: {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role
+        },
+        token
       }
     });
   } catch (error) {
-    console.error('Registration error:', error);
-    console.error('Error stack:', error.stack);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Registration failed',
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      message: error.message
     });
   }
 };
 
-// Login User
-export const login = async (req, res) => {
+exports.login = async (req, res) => {
   try {
-    console.log('Login request received:', req.body);
-    
     const { email, password } = req.body;
 
     if (!email || !password) {
-      console.log('Missing email or password');
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email and password are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide email and password'
       });
     }
 
-    console.log('Looking for user with email:', email);
-    
-    // Find user
-    const user = await User.findOne({ email });
-    
-    if (!user) {
-      console.log('User not found');
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid email or password' 
+    const user = await User.findOne({ email }).select('+password');
+
+    if (!user || !(await user.comparePassword(password))) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
       });
     }
 
-    console.log('User found, checking password');
-
-    // Check password
-    const isPasswordValid = await user.comparePassword(password);
-    
-    if (!isPasswordValid) {
-      console.log('Invalid password');
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid email or password' 
+    if (!user.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: 'Account is deactivated'
       });
     }
 
-    console.log('Password valid, generating token');
+    user.lastLogin = Date.now();
+    await user.save();
 
-    // Generate token
-    const token = generateToken(user);
-
-    console.log('Login successful');
+    const token = generateToken(user._id);
 
     res.json({
       success: true,
       message: 'Login successful',
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role
+      data: {
+        user: {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role,
+          avatar: user.avatar
+        },
+        token
       }
     });
   } catch (error) {
-    console.error('Login error:', error);
-    console.error('Error stack:', error.stack);
-    console.error('Error details:', {
-      name: error.name,
+    res.status(500).json({
+      success: false,
       message: error.message
-    });
-    
-    res.status(500).json({ 
-      success: false, 
-      message: 'Login failed',
-      error: error.message 
     });
   }
 };
+
+exports.getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+
+    res.json({
+      success: true,
+      data: { user }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+

@@ -1,30 +1,20 @@
+// FILE: routes/orderRoutes.js
+// ============================================
 const express = require('express');
 const router = express.Router();
-
 const {
   createOrder,
-  getUserOrders,
-  getAllOrders,
-  updateOrderStatus,
-  getOrderById,
+  getOrders,
+  getOrder,
+  cancelOrder
 } = require('../controllers/orderController');
+const { protect } = require('../middleware/auth');
 
-const { protect, adminOnly } = require('../middleware/authMiddleware');
+router.use(protect);
 
-// Create order - PUBLIC (no auth required for guest checkout)
-// But can also work for authenticated users
 router.post('/', createOrder);
-
-// Get single order by ID - PUBLIC (for order tracking)
-router.get('/:id', getOrderById);
-
-// Get logged-in user's orders - PROTECTED
-router.get('/user/orders', protect, getUserOrders);
-
-// Get all orders - ADMIN ONLY
-router.get('/all', protect, adminOnly, getAllOrders);
-
-// Update order status - ADMIN ONLY
-router.put('/:id/status', protect, adminOnly, updateOrderStatus);
+router.get('/', getOrders);
+router.get('/:id', getOrder);
+router.put('/:id/cancel', cancelOrder);
 
 module.exports = router;

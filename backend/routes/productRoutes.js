@@ -1,18 +1,24 @@
+// FILE: routes/productRoutes.js
+// ============================================
 const express = require('express');
 const router = express.Router();
 const {
-  getAllProducts,
-  getProductById,
+  getProducts,
+  getProduct,
   createProduct,
   updateProduct,
-  deleteProduct
+  deleteProduct,
+  getFeaturedProducts
 } = require('../controllers/productController');
-const { protect, adminOnly } = require('../middleware/authMiddleware');
+const { protect, authorize } = require('../middleware/auth');
+const { validateProduct } = require('../middleware/validator');
 
-router.get('/', getAllProducts);
-router.get('/:id', getProductById);
-router.post('/', protect, adminOnly, createProduct);
-router.put('/:id', protect, adminOnly, updateProduct);
-router.delete('/:id', protect, adminOnly, deleteProduct);
+router.get('/', getProducts);
+router.get('/featured', getFeaturedProducts);
+router.get('/:id', getProduct);
+router.post('/', protect, authorize('admin', 'superadmin'), validateProduct, createProduct);
+router.put('/:id', protect, authorize('admin', 'superadmin'), updateProduct);
+router.delete('/:id', protect, authorize('admin', 'superadmin'), deleteProduct);
 
 module.exports = router;
+
