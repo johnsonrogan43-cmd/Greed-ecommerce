@@ -1,7 +1,10 @@
 import axios from 'axios';
 
+// Support Vite and CRA style env vars, fallback to local backend
+const defaultBase = process.env.VITE_API_URL || process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 const API = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'https://greed-backend.vercel.app/api',
+  baseURL: defaultBase,
 });
 
 // Add token to requests

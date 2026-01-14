@@ -9,26 +9,45 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (token) {
-      localStorage.setItem('token', token);
-      // You can fetch user data here if needed
-    } else {
-      localStorage.removeItem('token');
-    }
-    setLoading(false);
+    const init = async () => {
+      if (token) {
+        // persist token
+        localStorage.setItem('token', token);
+        // fetch current user from backend
+        try {
+          const res = await API.get('/auth/me');
+          // backend returns { success, data: { user } }
+          setUser(res.data.data.user);
+        } catch (err) {
+          // invalid token or failed to fetch - clear auth
+          console.warn('Failed to fetch current user, clearing token');
+          setToken(null);
+          setUser(null);
+          localStorage.removeItem('token');
+        }
+      } else {
+        localStorage.removeItem('token');
+        setUser(null);
+      }
+      setLoading(false);
+    };
+    init();
   }, [token]);
 
   const register = async (userData) => {
     const response = await API.post('/auth/register', userData);
-    setToken(response.data.token);
-    setUser(response.data.user);
+    // backend returns nested payload: response.data.data.{token,user}
+    const payload = response.data.data || {};
+    setToken(payload.token);
+    setUser(payload.user);
     return response.data;
   };
 
   const login = async (credentials) => {
     const response = await API.post('/auth/login', credentials);
-    setToken(response.data.token);
-    setUser(response.data.user);
+    const payload = response.data.data || {};
+    setToken(payload.token);
+    setUser(payload.user);
     return response.data;
   };
 
